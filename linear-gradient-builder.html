@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Linear Gradient Builder</title>
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 28px 16px; background: Canvas; color: CanvasText; }
+    main { width: min(760px, 100%); margin: 0 auto; }
+    h1 { margin: 0 0 6px; font-size: clamp(1.6rem, 4vw, 2.2rem); }
+    .subtle { color: color-mix(in srgb, CanvasText 68%, transparent); }
+    .preview { height: 150px; border-radius: 14px; border: 1px solid color-mix(in srgb, CanvasText 20%, transparent); margin: 22px 0; }
+    .toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+    button { border: 1px solid color-mix(in srgb, CanvasText 24%, transparent); border-radius: 8px; padding: 9px 13px; font: inherit; cursor: pointer; background: ButtonFace; color: ButtonText; }
+    button.primary { background: #2563eb; border-color: #2563eb; color: white; }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    .colors { display: grid; gap: 10px; }
+    .color-row { display: grid; grid-template-columns: auto minmax(100px, 1fr) auto; align-items: center; gap: 12px; border: 1px solid color-mix(in srgb, CanvasText 18%, transparent); border-radius: 10px; padding: 12px; }
+    input[type="color"] { width: 54px; height: 42px; padding: 3px; border: 1px solid color-mix(in srgb, CanvasText 25%, transparent); border-radius: 7px; background: transparent; cursor: pointer; }
+    .color-label { font-weight: 600; }
+    .hex { display: block; margin-top: 3px; font-size: .9rem; }
+    .output-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 24px 0 8px; }
+    h2 { font-size: 1.1rem; margin: 0; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; background: color-mix(in srgb, CanvasText 6%, Canvas); border: 1px solid color-mix(in srgb, CanvasText 18%, transparent); border-radius: 10px; padding: 14px; margin: 0; min-height: 52px; font: 0.95rem/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; }
+    #status { min-height: 1.4em; margin-top: 8px; font-size: .9rem; }
+    @media (max-width: 420px) { .color-row { grid-template-columns: auto minmax(0, 1fr); } .color-row button { grid-column: 1 / -1; } }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Linear Gradient Builder</h1>
+  <p class="subtle">Choose any number of colors, preview the gradient, and copy the RGB values.</p>
+
+  <div id="preview" class="preview" aria-label="Gradient preview"></div>
+
+  <div class="toolbar">
+    <button id="addColor" class="primary" type="button">+ Add color</button>
+    <select id="displayMode" class="primary">
+      <option value=0>Ult Bar</option>
+      <option value=90>Sub Ult Bar</option>
+    </select>
+  </div>
+
+  <section aria-label="Gradient colors">
+    <div id="colors" class="colors"></div>
+  </section>
+
+  <div class="output-head">
+    <h2>RGB output</h2>
+    <button id="copyOutput" type="button">Copy values</button>
+  </div>
+  <pre id="output" aria-live="polite"></pre>
+  <div id="status" class="subtle" role="status"></div>
+</main>
+
+<script>
+(() => {
+  const colorsEl = document.getElementById('colors');
+  const previewEl = document.getElementById('preview');
+  const outputEl = document.getElementById('output');
+  const statusEl = document.getElementById('status');
+  const addButton = document.getElementById('addColor');
+  const copyButton = document.getElementById('copyOutput');
+
+  const displayMode = document.getElementById('displayMode');
+  let rotateVar = displayMode.value;
+
+  let nextId = 1;
+  const colors = [
+    { id: nextId++, value: '#ff3b30' },
+    { id: nextId++, value: '#3478f6' },
+    { id: nextId++, value: '#34c759' }
+  ];
+
+  function hexToRgb(hex) {
+    const normalized = hex.replace('#', '');
+    return {
+      r: parseInt(normalized.slice(0, 2), 16),
+      g: parseInt(normalized.slice(2, 4), 16),
+      b: parseInt(normalized.slice(4, 6), 16)
+    };
+  }
+
+  function getOutput() {
+    return colors.map(({ value }) => {
+      const { r, g, b } = hexToRgb(value);
+      return `"${r},${g},${b}"`;
+    }).join(', ');
+  }
+
+  function render() {
+    colorsEl.replaceChildren();
+
+    colors.forEach((color, index) => {
+      const row = document.createElement('div');
+      row.className = 'color-row';
+
+      const picker = document.createElement('input');
+      picker.type = 'color';
+      picker.value = color.value;
+      picker.setAttribute('aria-label', `Color ${index + 1}`);
+      picker.addEventListener('input', () => {
+        color.value = picker.value;
+        hexLabel.textContent = picker.value.toUpperCase();
+        updatePreviewAndOutput();
+      });
+
+      const info = document.createElement('div');
+      const label = document.createElement('span');
+      label.className = 'color-label';
+      label.textContent = `Color ${index + 1}`;
+      const hexLabel = document.createElement('span');
+      hexLabel.className = 'hex subtle';
+      hexLabel.textContent = color.value.toUpperCase();
+      info.append(label, hexLabel);
+
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.textContent = 'Remove';
+      remove.setAttribute('aria-label', `Remove color ${index + 1}`);
+      remove.disabled = colors.length <= 1;
+      remove.addEventListener('click', () => {
+        if (colors.length <= 1) return;
+        const indexToRemove = colors.findIndex(item => item.id === color.id);
+        if (indexToRemove !== -1) colors.splice(indexToRemove, 1);
+        render();
+      });
+
+      row.append(picker, info, remove);
+      colorsEl.append(row);
+    });
+
+    updatePreviewAndOutput();
+  }
+
+  function updatePreviewAndOutput() {
+    previewEl.style.background = `linear-gradient(${rotateVar}deg, ${colors.map(color => color.value).join(', ')})`;
+    outputEl.textContent = getOutput();
+  }
+
+  addButton.addEventListener('click', () => {
+    colors.push({ id: nextId++, value: '#ffffff' });
+    statusEl.textContent = '';
+    render();
+  });
+
+  displayMode.addEventListener('change', (event) => {
+    rotateVar = displayMode.value;
+    render();
+  });
+
+
+  copyButton.addEventListener('click', async () => {
+    const text = getOutput();
+    try {
+      await navigator.clipboard.writeText(text);
+      statusEl.textContent = 'RGB values copied to clipboard.';
+    } catch (error) {
+      // Fallback for browsers or contexts where Clipboard API access is blocked.
+      const temp = document.createElement('textarea');
+      temp.value = text;
+      temp.setAttribute('readonly', '');
+      temp.style.position = 'fixed';
+      temp.style.opacity = '0';
+      document.body.append(temp);
+      temp.select();
+      const copied = document.execCommand('copy');
+      temp.remove();
+      statusEl.textContent = copied
+        ? 'RGB values copied to clipboard.'
+        : 'Clipboard access was blocked. Select and copy the output above.';
+    }
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
